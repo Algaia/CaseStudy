@@ -35,7 +35,7 @@ export default function LoginPage({ onLogin }) {
           <div className="select-wrap"><select id="user" value={selectedName} onChange={(event) => setSelectedName(event.target.value)}>{users.map((user) => <option key={user.name} value={user.name}>{user.name} - {user.role}</option>)}</select><Icon name="down" size={16} /></div>
           <label htmlFor="password">Password</label>
           <div className="password-wrap"><input id="password" value={password} type={showPassword ? 'text' : 'password'} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" /><button type="button" onClick={() => setShowPassword(!showPassword)}>{showPassword ? 'Hide' : 'Show'}</button></div>
-          <div className="login-options"><label className="check-label"><input type="checkbox" defaultChecked /> <span>Keep me signed in</span></label><button type="button">Forgot password?</button></div>
+          <div className="login-options"><label className="check-label"><input type="checkbox" defaultChecked /> <span>Keep me signed in</span></label><button type="button" title="Not available in this demo">Forgot password?</button></div>
           <Button type="submit" className="login-submit">Sign in to workspace <Icon name="arrow" size={17} /></Button>
           <p className="demo-note"><span /> Demo workspace - choose any supplied role to preview its tailored view.</p>
         </form>

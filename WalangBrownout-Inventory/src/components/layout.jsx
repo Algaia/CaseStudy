@@ -1,7 +1,8 @@
+import { NavLink } from 'react-router-dom';
 import { navigation, roleAccess } from '../data';
 import { Icon } from './ui';
 
-export function Sidebar({ currentPage, setCurrentPage, user, isOpen, close }) {
+export function Sidebar({ user, isOpen, close, unreadAlerts }) {
   const permitted = roleAccess[user.role] || [];
   return (
     <>
@@ -15,15 +16,16 @@ export function Sidebar({ currentPage, setCurrentPage, user, isOpen, close }) {
         <nav aria-label="Main navigation">
           <p className="nav-heading">WORKSPACE</p>
           {navigation.filter((item) => permitted.includes(item.id)).map((item) => (
-            <button
+            <NavLink
               key={item.id}
-              className={`nav-link ${currentPage === item.id ? 'active' : ''}`}
-              onClick={() => { setCurrentPage(item.id); close(); }}
+              to={`/${item.id}`}
+              className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              onClick={close}
             >
               <Icon name={item.icon} size={18} />
               <span>{item.label}</span>
-              {item.id === 'alerts' && <b>{item.badge}</b>}
-            </button>
+              {item.id === 'alerts' && unreadAlerts > 0 && <b>{unreadAlerts}</b>}
+            </NavLink>
           ))}
         </nav>
         <div className="sidebar-help">
@@ -56,10 +58,11 @@ export function Header({ user, onMenu, onLogout, alerts, setCurrentPage }) {
   );
 }
 
-export function AppLayout({ children, currentPage, setCurrentPage, user, onLogout, alerts, menuOpen, setMenuOpen }) {
+export function AppLayout({ children, setCurrentPage, user, onLogout, alerts, menuOpen, setMenuOpen }) {
+  const unreadAlerts = alerts.filter((alert) => !alert.read).length;
   return (
     <div className="app-shell">
-      <Sidebar currentPage={currentPage} setCurrentPage={setCurrentPage} user={user} isOpen={menuOpen} close={() => setMenuOpen(false)} />
+      <Sidebar user={user} isOpen={menuOpen} close={() => setMenuOpen(false)} unreadAlerts={unreadAlerts} />
       <div className="main-area">
         <Header user={user} onMenu={() => setMenuOpen(true)} onLogout={onLogout} alerts={alerts} setCurrentPage={setCurrentPage} />
         <main>{children}</main>
