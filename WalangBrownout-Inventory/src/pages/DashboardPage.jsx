@@ -3,11 +3,12 @@ import { Button, Icon, MetricCard, PageTitle, SectionCard, StatusPill } from '..
 
 const statusTone = { 'Reorder now': 'danger', 'Expiry watch': 'warning', Critical: 'danger', Healthy: 'success' };
 
-export default function DashboardPage({ user, products, alerts, activity, setCurrentPage, onRefresh }) {
+export default function DashboardPage({ user, products, alerts, activity, tasks, setCurrentPage, onRefresh }) {
   const totalUnits = products.reduce((total, product) => total + product.onHand, 0);
   const healthy = products.filter((product) => product.status === 'Healthy').length;
   const alerting = alerts.filter((alert) => !alert.read);
   const riskProducts = products.filter((product) => product.status !== 'Healthy');
+  const fefoTasks = tasks.filter((task) => task.priority === 'FEFO priority').length;
 
   return <>
     <PageTitle
@@ -17,10 +18,10 @@ export default function DashboardPage({ user, products, alerts, activity, setCur
       action={<Button variant="secondary" icon="refresh" onClick={onRefresh}>Refresh view</Button>}
     />
     <section className="metrics-grid">
-      <MetricCard label="Units on hand" value={formatNumber(totalUnits)} helper="across 5 active products" icon="boxes" trend={{ direction: 'neutral', text: 'Live total' }} />
-      <MetricCard label="Needs attention" value={riskProducts.length} helper="reorder, expiry, or count review" tone="amber" icon="warning" trend={{ direction: 'down', text: '4 unresolved alerts' }} />
+      <MetricCard label="Units on hand" value={formatNumber(totalUnits)} helper={`across ${products.length} active products`} icon="boxes" trend={{ direction: 'neutral', text: 'Live total' }} />
+      <MetricCard label="Needs attention" value={riskProducts.length} helper="reorder, expiry, or count review" tone="amber" icon="warning" trend={{ direction: 'down', text: `${alerting.length} unresolved alerts` }} />
       <MetricCard label="Inventory health" value={`${Math.round((healthy / products.length) * 100)}%`} helper="products within target levels" tone="green" icon="check" trend={{ direction: 'up', text: '3% from last week' }} />
-      <MetricCard label="Open pick tasks" value="3" helper="1 with FEFO priority" tone="violet" icon="checklist" trend={{ direction: 'neutral', text: 'Next due in 18 min' }} />
+      <MetricCard label="Open pick tasks" value={tasks.length} helper={`${fefoTasks} with FEFO priority`} tone="violet" icon="checklist" trend={{ direction: 'neutral', text: 'Next due in 18 min' }} />
     </section>
     <section className="dashboard-grid top-grid">
       <SectionCard title="Attention needed" subtitle="Prioritize these live operational signals" action={<Button variant="text" onClick={() => setCurrentPage('alerts')}>View all <Icon name="arrow" size={15} /></Button>}>
