@@ -23,16 +23,17 @@ class WorkspaceController extends Controller
         return response()->json([
             'products' => Product::all(),
             'lots' => Lot::all(),
-            'alerts' => Alert::latest()->get(),
-            'activity' => ActivityLog::with('user')->latest()->get()->map(fn ($log) => [
-                'id' => $log->id,
-                'event' => $log->event,
-                'reference' => $log->reference,
-                'person' => $log->user->name,
-                'role' => $log->user->role,
-                'time' => $log->created_at->diffForHumans(),
-                'kind' => $log->kind,
-            ]),
+            'alerts' => Alert::latest()->get()->map(fn ($alert) => [
+                'id' => $alert->id,
+                'type' => $alert->type,
+                'productId' => $alert->product_id,
+                'title' => $alert->title,
+                'detail' => $alert->detail,
+                'time' => $alert->created_at->diffForHumans(),
+                'action' => $alert->action,
+                'actionTarget' => $alert->action_target,
+                'read' => $alert->read,
+                ]),
             'tasks' => PickTask::all(),
             'recommendations' => ReorderRecommendation::with('product')->get()->map(fn ($rec) => [
                 'id' => $rec->id,
