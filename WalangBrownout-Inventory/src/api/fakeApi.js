@@ -1,57 +1,88 @@
-// A simulated "fake REST API" for the midterm frontend-only scope.
-//
-// Real projects would call `fetch('/api/products')` against a server such as
-// Laravel (Module 2, next term) or a mock server like json-server. For now we
-// deep-clone the seed data from `data.js` and return it from a function that
-// behaves exactly like a real network call: it's asynchronous, it can be
-// slow, and it can fail — so every consumer still has to handle loading and
-// error states the same way it would for a real endpoint.
-//
-// Trigger a failed request on purpose (to demo the error path) by loading
-// the app with ?apiError=1 in the URL.
+// Real API client — replaces fakeApi.js. Talks to the Laravel backend.
+// Set VITE_API_URL in your .env (e.g. http://127.0.0.1:8000/api locally,
+// your Railway/Render URL in production).
 
-import {
-  initialActivity,
-  initialAlerts,
-  initialLots,
-  initialProducts,
-  initialWriteoffs,
-  pickTasks,
-  reorderRecommendations,
-} from '../data';
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
 
-const NETWORK_DELAY_MS = 650;
-
-function shouldSimulateError() {
-  if (typeof window === 'undefined') return false;
-  return new URLSearchParams(window.location.search).get('apiError') === '1';
+function authHeaders() {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-function clone(value) {
-  return JSON.parse(JSON.stringify(value));
-}
-
-/**
- * Simulates `fetch('/api/inventory').then((res) => res.json())`.
- * Resolves with every collection the app needs on first load, or rejects
- * with an Error the same way a failed `fetch` would.
- */
-export function fetchInventoryWorkspace() {
-  return new Promise((resolve, reject) => {
-    window.setTimeout(() => {
-      if (shouldSimulateError()) {
-        reject(new Error('Could not reach the inventory service. Please try again.'));
-        return;
-      }
-      resolve({
-        products: clone(initialProducts),
-        lots: clone(initialLots),
-        alerts: clone(initialAlerts),
-        activity: clone(initialActivity),
-        tasks: clone(pickTasks),
-        recommendations: clone(reorderRecommendations),
-        writeoffs: clone(initialWriteoffs),
-      });
-    }, NETWORK_DELAY_MS);
+async function request(path, options = {}) {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...authHeaders(),
+      ...options.headers,
+    },
   });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `Request failed: ${res.status}`);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+// --- Auth ---
+export async function login(email, password) {
+  const data = await request('/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+  localStorage.setItem('token', data.token);
+  return data.user;
+}
+
+export function logout() {
+  const promise = request('/logout', { method: 'POST' });
+  localStorage.removeItem('token');
+  return promise;
+}
+
+// --- Workspace (replaces fetchInventoryWorkspace) ---
+export function fetchInventoryWorkspace() {
+  return request('/workspace');
+}
+
+// --- Mutations ---
+export function receiveStock(receipt) {
+  return request('/receive', {
+    method: 'POST',
+    body: JSON.stringify({
+      productId: receipt.product.id,
+      quantity: receipt.quantity,
+      lot: receipt.lot,
+      received: receipt.received,
+      expires: receipt.expires,
+      location: receipt.location,
+    }),
+  });
+}
+
+export function completePick(taskId) {
+  return request(`/picks/${taskId}/complete`, { method: 'POST' });
+}
+
+export function reportPickIssue(taskId) {
+  return request(`/picks/${taskId}/report-issue`, { method: 'POST' });
+}
+
+export function createPurchaseOrder(recommendationId) {
+  return request(`/reorder/${recommendationId}/create-po`, { method: 'POST' });
+}
+
+export function writeOffLot(lotId, reason) {
+  return request(`/lots/${lotId}/writeoff`, { method: 'POST', body: JSON.stringify({ reason }) });
+}
+
+export function toggleAlertRead(alertId, markRead) {
+  return request(`/alerts/${alertId}/read`, {
+    method: 'PATCH',
+    body: JSON.stringify(typeof markRead === 'boolean' ? { read: markRead } : {}),
+  });
+}
+
+export function markAllRead() {
+  return request('/alerts/read-all', { method: 'POST' });
 }
