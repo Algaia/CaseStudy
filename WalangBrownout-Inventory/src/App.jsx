@@ -25,10 +25,6 @@ const pageComponents = {
   reports: ReportsPage,
 };
 
-function createEvent(event, reference, user, kind) {
-  return { id: `${Date.now()}-${event}`, event, reference, person: user.name, role: user.role, time: 'Just now', kind };
-}
-
 function toCsv(rows) {
   if (!rows.length) return 'No records available\n';
   const headers = Object.keys(rows[0]);
@@ -36,7 +32,6 @@ function toCsv(rows) {
   return [headers.map(escape).join(','), ...rows.map((row) => headers.map((header) => escape(row[header])).join(','))].join('\n');
 }
 
-/** Loading state while the fake API "request" is in flight — see src/api/fakeApi.js. */
 function WorkspaceLoading() {
   return (
     <div className="workspace-status">
@@ -46,7 +41,6 @@ function WorkspaceLoading() {
   );
 }
 
-/** Error state if the fake API "request" rejects. Try loading the app with ?apiError=1. */
 function WorkspaceError({ message, onRetry }) {
   return (
     <div className="workspace-status">
@@ -69,23 +63,25 @@ export default function App() {
   const location = useLocation();
   const currentPage = location.pathname.replace('/', '') || 'dashboard';
 
-  // Fetch the workspace data the same way a real REST call would be
-  // consumed: useEffect on mount, loading state while it's pending, error
-  // state if it fails. See src/api/fakeApi.js for what's actually happening
-  // under the hood for this frontend-only midterm scope.
   useEffect(() => {
+    if (!user) { setLoading(false); return undefined; }
     let cancelled = false;
-    fetchInventoryWorkspace()
+    setLoading(true);
+    api.fetchInventoryWorkspace()
       .then((data) => { if (!cancelled) setWorkspace(data); })
       .catch((err) => { if (!cancelled) setError(err.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [requestId]);
+  }, [user, requestId]);
 
   function retryFetch() {
     setLoading(true);
     setError(null);
     setRequestId((id) => id + 1);
+  }
+
+  function refreshWorkspace() {
+    return api.fetchInventoryWorkspace().then(setWorkspace).catch((err) => setError(err.message));
   }
 
   useEffect(() => {
@@ -94,8 +90,6 @@ export default function App() {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
-  // Guard against a role-restricted URL being typed directly, bookmarked, or
-  // reached via browser back/forward, since routing now lives in the URL.
   useEffect(() => {
     if (!user || !workspace) return;
     if (!roleAccess[user.role].includes(currentPage)) {
@@ -109,14 +103,20 @@ export default function App() {
     setToast({ message, tone });
   }
 
-  function login(nextUser) {
-    setUser(nextUser);
-    navigate('/dashboard');
-    showToast(`Signed in as ${nextUser.role}.`);
+  function login(email, password) {
+    api.login(email, password)
+      .then((nextUser) => {
+        setUser(nextUser);
+        navigate('/dashboard');
+        showToast(`Signed in as ${nextUser.role}.`);
+      })
+      .catch((err) => showToast(err.message, 'warning'));
   }
 
   function logout() {
+    api.logout().catch(() => {});
     setUser(null);
+    setWorkspace(null);
     setMenuOpen(false);
     setToast(null);
   }
@@ -129,68 +129,62 @@ export default function App() {
     }
   }
 
-  function updateWorkspace(updater) {
-    setWorkspace((current) => ({ ...current, ...updater(current) }));
-  }
-
   function receiveStock(receipt) {
-    const { product, quantity, lot, received, expires, location: loc } = receipt;
-    updateWorkspace((current) => ({
-      products: current.products.map((item) => item.id === product.id ? { ...item, onHand: item.onHand + quantity, available: item.available + quantity, lastUpdated: 'Just now', status: item.available + quantity >= item.reorderPoint ? (item.status === 'Critical' || item.status === 'Reorder now' ? 'Healthy' : item.status) : item.status } : item),
-      lots: [{ id: lot, productId: product.id, received, expires: expires || null, quantity, location: loc, state: 'Available' }, ...current.lots],
-      activity: [createEvent('Shipment received', `${lot} - ${quantity} units`, user, 'receive'), ...current.activity],
-    }));
-    showToast(`${quantity} units of ${product.id} received and recorded.`);
+    api.receiveStock(receipt)
+      .then(() => {
+        refreshWorkspace();
+        showToast(`${receipt.quantity} units of ${receipt.product.id} received and recorded.`);
+      })
+      .catch((err) => showToast(err.message, 'warning'));
   }
 
   function completePick(task) {
-    updateWorkspace((current) => ({
-      tasks: current.tasks.filter((item) => item.id !== task.id),
-      products: current.products.map((item) => item.id === task.productId ? { ...item, onHand: Math.max(0, item.onHand - task.quantity), available: Math.max(0, item.available - task.quantity), lastUpdated: 'Just now' } : item),
-      lots: current.lots.map((lot) => lot.id === task.lot ? { ...lot, quantity: Math.max(0, lot.quantity - task.quantity) } : lot),
-      activity: [createEvent('FEFO pick completed', `${task.lot} - ${task.quantity} units`, user, 'pick'), ...current.activity],
-      alerts: task.priority === 'FEFO priority' ? current.alerts.map((alert) => alert.type === 'expiry' && alert.productId === task.productId ? { ...alert, read: true } : alert) : current.alerts,
-    }));
-    showToast(`${task.order} marked complete. Live inventory has been updated.`);
+    api.completePick(task.id)
+      .then(() => {
+        refreshWorkspace();
+        showToast(`${task.order} marked complete. Live inventory has been updated.`);
+      })
+      .catch((err) => showToast(err.message, 'warning'));
   }
 
   function createPurchaseOrder(id) {
-    const recommendation = workspace.recommendations.find((item) => item.id === id);
-    if (!recommendation || recommendation.created) return;
-    const poNumber = `PO-2026-${String(149 + workspace.activity.length).padStart(4, '0')}`;
-    updateWorkspace((current) => ({
-      recommendations: current.recommendations.map((item) => item.id === id ? { ...item, created: true } : item),
-      activity: [createEvent('Purchase order created', `${poNumber} - ${recommendation.suggestedOrder} ${recommendation.id} units`, user, 'order'), ...current.activity],
-      alerts: current.alerts.map((alert) => alert.productId === recommendation.id ? { ...alert, read: true } : alert),
-    }));
-    showToast(`${poNumber} created for ${recommendation.suggestedOrder} units.`);
+    api.createPurchaseOrder(id)
+      .then((data) => {
+        refreshWorkspace();
+        showToast(`${data.poNumber} created.`);
+      })
+      .catch((err) => showToast(err.message, 'warning'));
   }
 
   function writeOffLot(lot, product, reason) {
-    if (!lot.quantity) return;
-    updateWorkspace((current) => ({
-      products: current.products.map((item) => item.id === product.id ? { ...item, onHand: Math.max(0, item.onHand - lot.quantity), available: Math.max(0, item.available - lot.quantity), lastUpdated: 'Just now' } : item),
-      lots: current.lots.filter((item) => item.id !== lot.id),
-      writeoffs: [{ id: `WO-${Date.now()}`, lotId: lot.id, productId: product.id, quantity: lot.quantity, reason, date: new Date().toISOString().slice(0, 10), person: user.name }, ...current.writeoffs],
-      activity: [createEvent('Stock written off', `${lot.id} - ${lot.quantity} units (${reason})`, user, 'warning'), ...current.activity],
-    }));
-    showToast(`${lot.quantity} units from lot ${lot.id} were written off.`);
+    api.writeOffLot(lot.id, reason)
+      .then(() => {
+        refreshWorkspace();
+        showToast(`${lot.quantity} units from lot ${lot.id} were written off.`);
+      })
+      .catch((err) => showToast(err.message, 'warning'));
   }
 
   function reportPickIssue(task) {
-    updateWorkspace((current) => ({ activity: [createEvent('Pick issue reported', task.order, user, 'warning'), ...current.activity] }));
-    showToast(`An issue for ${task.order} was added to the activity log.`);
+    api.reportPickIssue(task.id)
+      .then(() => {
+        refreshWorkspace();
+        showToast(`An issue for ${task.order} was added to the activity log.`);
+      })
+      .catch((err) => showToast(err.message, 'warning'));
   }
 
   function toggleAlertRead(id, markRead) {
-    updateWorkspace((current) => ({
-      alerts: current.alerts.map((alert) => alert.id === id ? { ...alert, read: typeof markRead === 'boolean' ? markRead : !alert.read } : alert),
-    }));
+    api.toggleAlertRead(id, markRead).then(refreshWorkspace).catch(() => {});
   }
 
   function markAllRead() {
-    updateWorkspace((current) => ({ alerts: current.alerts.map((alert) => ({ ...alert, read: true })) }));
-    showToast('All alerts marked as read.');
+    api.markAllRead()
+      .then(() => {
+        refreshWorkspace();
+        showToast('All alerts marked as read.');
+      })
+      .catch((err) => showToast(err.message, 'warning'));
   }
 
   function exportCsv(name, rows) {
@@ -228,7 +222,7 @@ export default function App() {
     onRead: toggleAlertRead,
     onReadAll: markAllRead,
     onExport: exportCsv,
-    onRefresh: () => showToast('Live inventory is already synchronized.'),
+    onRefresh: () => { refreshWorkspace(); showToast('Live inventory refreshed.'); },
   };
 
   return (
