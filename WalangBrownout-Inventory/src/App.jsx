@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { roleAccess } from './data';
-import { fetchInventoryWorkspace } from './api/fakeApi';
+import * as api from './api/realApi';
 import { AppLayout } from './components/layout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
