@@ -1,16 +1,14 @@
 import { useState } from 'react';
-import { users } from '../data';
 import { Button, Icon } from '../components/ui';
 
 export default function LoginPage({ onLogin }) {
-  const [selectedName, setSelectedName] = useState(users[0].name);
-  const [password, setPassword] = useState('warehouse2026');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const selectedUser = users.find((user) => user.name === selectedName);
 
   function submit(event) {
     event.preventDefault();
-    if (password.trim()) onLogin(selectedUser);
+    if (email.trim() && password.trim()) onLogin(email.trim(), password);
   }
 
   return (
@@ -31,13 +29,12 @@ export default function LoginPage({ onLogin }) {
       <section className="login-panel">
         <form className="login-card" onSubmit={submit}>
           <div className="login-card-heading"><span className="lock-icon">⌁</span><p className="eyebrow">SECURE ACCESS</p><h2>Welcome back</h2><p>Sign in to continue to inventory control.</p></div>
-          <label htmlFor="user">Team member</label>
-          <div className="select-wrap"><select id="user" value={selectedName} onChange={(event) => setSelectedName(event.target.value)}>{users.map((user) => <option key={user.name} value={user.name}>{user.name} - {user.role}</option>)}</select><Icon name="down" size={16} /></div>
+          <label htmlFor="email">Email</label>
+          <input id="email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@warehouse.com" autoComplete="username" />
           <label htmlFor="password">Password</label>
           <div className="password-wrap"><input id="password" value={password} type={showPassword ? 'text' : 'password'} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" /><button type="button" onClick={() => setShowPassword(!showPassword)}>{showPassword ? 'Hide' : 'Show'}</button></div>
           <div className="login-options"><label className="check-label"><input type="checkbox" defaultChecked /> <span>Keep me signed in</span></label><button type="button" title="Not available in this demo">Forgot password?</button></div>
           <Button type="submit" className="login-submit">Sign in to workspace <Icon name="arrow" size={17} /></Button>
-          <p className="demo-note"><span /> Demo workspace - choose any supplied role to preview its tailored view.</p>
         </form>
       </section>
     </main>
